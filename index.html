@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Duty Manager v10 (16-Row Split)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: { colors: { primary: '#111827', brand: '#2563eb' } }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #f3f4f6; font-family: 'Segoe UI', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .app-container { max-width: 500px; margin: 0 auto; min-height: 100vh; background-color: #ffffff; display: flex; flex-direction: column; box-shadow: 0 0 20px rgba(0,0,0,0.05); }
+        .view-section { display: none; flex: 1; overflow-y: auto; padding-bottom: 80px; }
+        .view-section.active { display: block; }
+        ::-webkit-scrollbar { width: 3px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        canvas { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); background: white; max-width: 100%; height: auto; }
+    </style>
+</head>
+<body class="text-slate-800">
+
+<!-- Hidden Asset: Logo -->
+<img id="logo-asset" src="logo.png" style="display:none" onerror="this.dataset.error='true'">
+
+<div class="app-container">
+    <header class="bg-slate-900 text-white px-5 py-4 flex justify-between items-center sticky top-0 z-20 shadow-md">
+        <div>
+            <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Bahon Manager</div>
+            <h1 class="text-xl font-bold">Dashboard</h1>
+        </div>
+        <button class="h-10 w-10 bg-white text-slate-900 rounded-full flex items-center justify-center hover:bg-slate-100 shadow-lg active:scale-90 transition-transform" onclick="openCanvasPreview()">
+            <i class="fas fa-print text-lg"></i>
+        </button>
+    </header>
+
+    <!-- VIEWS -->
+    <main id="view-dashboard" class="view-section active bg-slate-50">
+        <div class="p-4 space-y-4">
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-slate-500 text-xs font-bold uppercase">Current Month</h3>
+                    <span class="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded" id="current-month-lbl">-</span>
+                </div>
+                <div class="text-4xl font-black text-slate-800 mb-2">৳ <span id="dash-total">0</span></div>
+                <div class="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-100">
+                    <div><div class="text-slate-400 text-xs">Total Duties</div><div class="text-lg font-bold" id="dash-count">0</div></div>
+                    <div><div class="text-slate-400 text-xs">OT Hours</div><div class="text-lg font-bold text-orange-500" id="dash-ot">0</div></div>
+                </div>
+            </div>
+            <div class="flex justify-between items-end px-1"><h3 class="font-bold text-slate-700">Recent Activity</h3><button onclick="switchTab('history')" class="text-blue-600 text-xs font-bold">View History</button></div>
+            <div id="dashboard-list" class="space-y-3 pb-20"></div>
+        </div>
+    </main>
+
+    <main id="view-history" class="view-section bg-slate-50">
+        <div class="bg-white px-4 py-3 shadow-sm sticky top-0 z-10">
+            <label class="text-xs font-bold text-slate-400 uppercase block mb-1">Filter by Month</label>
+            <select id="filter-month" onchange="renderHistory()" class="w-full bg-slate-100 border-none text-sm rounded-lg px-3 py-2 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none"></select>
+        </div>
+        <div id="history-list" class="p-4 space-y-3 pb-20"></div>
+    </main>
+
+    <main id="view-settings" class="view-section bg-slate-50">
+        <div class="p-5 space-y-6 pb-20">
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                <h3 class="font-bold text-slate-800 mb-4 flex items-center"><i class="fas fa-id-card text-blue-500 mr-2"></i> User Profile</h3>
+                <div class="space-y-3">
+                    <div><label class="text-xs font-bold text-slate-400 uppercase">Name</label><input type="text" id="setting-name" class="w-full font-bold text-slate-700 border-b border-slate-200 py-2 outline-none" onchange="updateSettings()"></div>
+                    <div><label class="text-xs font-bold text-slate-400 uppercase">ID</label><input type="text" id="setting-id" class="w-full font-bold text-slate-700 border-b border-slate-200 py-2 outline-none" onchange="updateSettings()"></div>
+                    <div><label class="text-xs font-bold text-slate-400 uppercase">Bkash</label><input type="number" id="setting-bkash" class="w-full font-bold text-slate-700 border-b border-slate-200 py-2 outline-none" onchange="updateSettings()"></div>
+                </div>
+            </div>
+            
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                <h3 class="font-bold text-slate-800 mb-4 flex items-center"><i class="fas fa-users text-purple-500 mr-2"></i> Team</h3>
+                <div class="flex gap-2 mb-4"><input type="text" id="new-tech-input" placeholder="Name" class="flex-1 border border-slate-200 rounded px-2 text-sm"><button onclick="addTech()" class="bg-purple-600 text-white px-3 py-2 rounded text-xs font-bold">Add</button></div>
+                <div id="tech-list-display" class="space-y-2"></div>
+            </div>
+
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                <h3 class="font-bold text-slate-800 mb-4 flex items-center"><i class="fas fa-coins text-yellow-500 mr-2"></i> Rates</h3>
+                <div class="grid grid-cols-3 gap-4">
+                    <div><label class="text-xs font-bold text-slate-400 uppercase">Day</label><input type="number" id="setting-base" class="w-full font-bold text-slate-700 border-b border-slate-200 py-1 outline-none" onchange="updateSettings()"></div>
+                    <div><label class="text-xs font-bold text-slate-400 uppercase">OT/Hr</label><input type="number" id="setting-ot" class="w-full font-bold text-slate-700 border-b border-slate-200 py-1 outline-none" onchange="updateSettings()"></div>
+                    <div><label class="text-xs font-bold text-slate-400 uppercase">Night</label><input type="number" id="setting-night" class="w-full font-bold text-slate-700 border-b border-slate-200 py-1 outline-none" onchange="updateSettings()"></div>
+                </div>
+            </div>
+
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                <div class="flex gap-3">
+                    <button onclick="downloadBackup()" class="flex-1 bg-slate-800 text-white py-2 rounded-lg text-sm font-bold">Backup</button>
+                    <label class="flex-1 bg-slate-100 text-slate-700 py-2 rounded-lg text-sm font-bold text-center cursor-pointer border border-slate-200">Restore<input type="file" class="hidden" onchange="restoreBackup(this)"></label>
+                </div>
+                <button onclick="clearAllData()" class="w-full border border-red-200 text-red-500 bg-red-50 rounded-lg py-3 text-sm font-bold mt-4">Reset App</button>
+            </div>
+            <div class="text-center text-xs text-slate-300">v10.0 (16-Day Sheet)</div>
+        </div>
+    </main>
+
+    <button onclick="openModal()" class="fixed bottom-24 right-5 h-14 w-14 bg-slate-900 text-white rounded-full shadow-xl flex items-center justify-center text-2xl z-40 active:scale-90 transition-transform"><i class="fas fa-plus"></i></button>
+
+    <nav class="bg-white border-t border-slate-200 flex justify-around items-center h-16 fixed bottom-0 w-full max-w-[500px] z-30">
+        <button onclick="switchTab('dashboard')" class="nav-item active flex-1 h-full flex flex-col items-center justify-center text-slate-400" id="nav-dashboard"><i class="fas fa-home text-xl mb-1"></i><span class="text-[10px] font-bold">Home</span></button>
+        <button onclick="switchTab('history')" class="nav-item flex-1 h-full flex flex-col items-center justify-center text-slate-400" id="nav-history"><i class="fas fa-list text-xl mb-1"></i><span class="text-[10px] font-bold">History</span></button>
+        <button onclick="switchTab('settings')" class="nav-item flex-1 h-full flex flex-col items-center justify-center text-slate-400" id="nav-settings"><i class="fas fa-cog text-xl mb-1"></i><span class="text-[10px] font-bold">Settings</span></button>
+    </nav>
+</div>
+
+<!-- ENTRY MODAL -->
+<div id="entry-modal" class="hidden fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm">
+    <div class="bg-white w-full max-w-[500px] rounded-t-3xl p-6 h-[90vh] flex flex-col animate-slide-up">
+        <div class="flex justify-between items-center mb-6"><h2 class="text-xl font-bold text-slate-800" id="modal-title">New Entry</h2><button onclick="closeModal()" class="h-8 w-8 bg-slate-100 rounded-full text-slate-500"><i class="fas fa-times"></i></button></div>
+        <form id="duty-form" onsubmit="saveEntry(event)" class="flex-1 overflow-y-auto space-y-5 pb-5 pr-1">
+            <input type="hidden" id="entry-id">
+            <div class="grid grid-cols-2 gap-4">
+                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Technician</label><select id="form-tech" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-3 text-sm font-bold text-slate-700 outline-none"></select></div>
+                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Assistant</label><select id="form-asst" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-3 text-sm font-bold text-slate-700 outline-none"><option value="">None</option></select></div>
+            </div>
+            <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Date</label><input type="date" id="form-date" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"></div>
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Shift Type</label>
+                <div class="grid grid-cols-4 gap-2">
+                    <label class="cursor-pointer"><input type="radio" name="shift" value="M" class="peer sr-only" onchange="handleShiftChange()" checked><div class="py-3 rounded-lg border border-slate-200 text-center font-bold text-slate-500 peer-checked:bg-yellow-100 peer-checked:text-yellow-700 peer-checked:border-yellow-300">M</div></label>
+                    <label class="cursor-pointer"><input type="radio" name="shift" value="R" class="peer sr-only" onchange="handleShiftChange()"><div class="py-3 rounded-lg border border-slate-200 text-center font-bold text-slate-500 peer-checked:bg-blue-100 peer-checked:text-blue-700 peer-checked:border-blue-300">R</div></label>
+                    <label class="cursor-pointer"><input type="radio" name="shift" value="E" class="peer sr-only" onchange="handleShiftChange()"><div class="py-3 rounded-lg border border-slate-200 text-center font-bold text-slate-500 peer-checked:bg-purple-100 peer-checked:text-purple-700 peer-checked:border-purple-300">E</div></label>
+                    <label class="cursor-pointer"><input type="radio" name="shift" value="N" class="peer sr-only" onchange="handleShiftChange()"><div class="py-3 rounded-lg border border-slate-200 text-center font-bold text-slate-500 peer-checked:bg-slate-800 peer-checked:text-white peer-checked:border-slate-600">N</div></label>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                <div><label class="block text-xs font-bold text-slate-400 mb-1">In Time</label><input type="time" id="form-in" class="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm font-bold"></div>
+                <div><label class="block text-xs font-bold text-slate-400 mb-1">Out Time</label><input type="time" id="form-out" oninput="calculateOT()" class="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm font-bold"></div>
+            </div>
+            <div id="ot-panel" class="bg-orange-50 p-4 rounded-xl border border-orange-100 flex justify-between items-center"><span class="text-xs font-bold text-orange-600 uppercase">Overtime (Hrs)</span><input type="number" id="form-ot" step="0.5" class="w-20 bg-white border border-orange-200 rounded p-1 text-right font-bold text-lg" value="0"></div>
+            <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Description (Max 100 chars)</label><textarea id="form-desc" rows="3" maxlength="100" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea></div>
+            <button type="submit" class="w-full bg-slate-900 text-white py-4 rounded-xl font-bold text-lg shadow-lg active:scale-95 transition-transform">Save Entry</button>
+        </form>
+    </div>
+</div>
+
+<!-- PREVIEW MODAL -->
+<div id="canvas-modal" class="hidden fixed inset-0 z-50 flex flex-col bg-white">
+    <div class="bg-slate-900 text-white p-4 flex justify-between items-center shadow-md shrink-0">
+        <div><h2 class="text-lg font-bold">Bill Preview</h2><div class="text-[10px] text-slate-400" id="preview-page-info">Page 1 of 1</div></div>
+        <button onclick="closeCanvasPreview()" class="h-8 w-8 bg-white/20 rounded-full flex items-center justify-center"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="flex-1 bg-slate-200 overflow-auto p-4 flex justify-center items-start"><canvas id="billCanvas" class="shadow-2xl bg-white"></canvas></div>
+    <div class="bg-white p-4 border-t border-slate-200 shrink-0 flex gap-3 items-center justify-between">
+        <div class="flex gap-2">
+            <button onclick="prevPage()" class="h-10 w-10 border border-slate-300 rounded-lg flex items-center justify-center text-slate-600"><i class="fas fa-chevron-left"></i></button>
+            <button onclick="nextPage()" class="h-10 w-10 border border-slate-300 rounded-lg flex items-center justify-center text-slate-600"><i class="fas fa-chevron-right"></i></button>
+        </div>
+        <button onclick="downloadCanvasPDF()" class="flex-1 bg-blue-600 text-white h-10 rounded-lg font-bold shadow-lg flex items-center justify-center gap-2"><i class="fas fa-download"></i> Download PDF</button>
+    </div>
+</div>
+
+<script>
+    let app = { entries: [], settings: { name: "", id: "", bkash: "", baseSalary: 450, otRate: 40, nightBonus: 150, technicians: ['Mamun', 'Shobuj', 'Rabbi'], shiftRules: { 'M': { start: '07:00', end: '16:00' }, 'R': { start: '09:00', end: '18:00' }, 'E': { start: '14:00', end: '23:00' }, 'N': { start: '22:00', end: '07:00' } } } };
+    let canvasState = { ctx: null, data: [], currentPage: 0, totalPages: 0, monthName: "" };
+    
+    // Config: 16 Rows per page
+    const ITEMS_PER_PAGE = 16; 
+
+    window.onload = function() {
+        const stored = localStorage.getItem('duty_manager_v10');
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            app.entries = parsed.entries || [];
+            if(parsed.settings) app.settings = {...app.settings, ...parsed.settings};
+        }
+        populateSettingsInputs(); populateMonthFilter(); renderDashboard(); renderTechSettings();
+        document.getElementById('form-date').valueAsDate = new Date();
+    };
+
+    function saveData() { localStorage.setItem('duty_manager_v10', JSON.stringify(app)); renderDashboard(); renderHistory(); populateMonthFilter(); }
+
+    function openCanvasPreview() {
+        const filter = document.getElementById('filter-month').value; 
+        if(!filter) return alert("Select a month first.");
+        const rawData = app.entries.filter(e => e.date.startsWith(filter));
+        if(rawData.length === 0) return alert("No data for this month!");
+        rawData.sort((a,b) => new Date(a.date) - new Date(b.date));
+        
+        canvasState.data = rawData;
+        canvasState.totalPages = Math.ceil(rawData.length / ITEMS_PER_PAGE);
+        canvasState.currentPage = 0;
+        const [y, m] = filter.split('-');
+        canvasState.monthName = new Date(y, m-1).toLocaleString('default', { month: 'long', year: 'numeric' });
+
+        document.getElementById('canvas-modal').classList.remove('hidden');
+        
+        const canvas = document.getElementById('billCanvas');
+        const width = 800; const height = 1132;
+        canvas.width = width * 1.5; canvas.height = height * 1.5; 
+        canvas.style.width = width + "px"; canvas.style.height = height + "px";
+        
+        canvasState.ctx = canvas.getContext('2d');
+        canvasState.ctx.scale(1.5, 1.5);
+        drawPage(0);
+    }
+
+    function drawPage(pageIndex) {
+        const ctx = canvasState.ctx;
+        const width = 800; const height = 1132;
+        ctx.fillStyle = "white"; ctx.fillRect(0,0,width,height);
+        ctx.fillStyle = "black"; ctx.strokeStyle = "black"; ctx.lineWidth = 1;
+
+        // HEADER
+        ctx.font = "bold 24px Arial"; ctx.textAlign = "center";
+        ctx.fillText("Daily Assistant Technician Bill", width/2, 40);
+
+        const startY = 60; const boxH = 90; const leftX = 40; const rightX = width - 40; const w = rightX - leftX;
+        ctx.strokeRect(leftX, startY, w, boxH);
+        ctx.beginPath();
+        ctx.moveTo(leftX, startY + 30); ctx.lineTo(rightX - 150, startY + 30); 
+        ctx.moveTo(leftX, startY + 60); ctx.lineTo(rightX - 150, startY + 60); 
+        ctx.moveTo(leftX + 350, startY); ctx.lineTo(leftX + 350, startY + 90); 
+        ctx.moveTo(rightX - 150, startY); ctx.lineTo(rightX - 150, startY + boxH);
+        ctx.stroke();
+
+        ctx.font = "16px Arial"; ctx.textAlign = "left";
+        const pad = 10; const col2X = leftX + 350 + pad;
+        ctx.fillText(`Month: ${canvasState.monthName.split(' ')[0]}`, leftX + pad, startY + 20);
+        ctx.fillText(`Year: ${canvasState.monthName.split(' ')[1]}`, col2X, startY + 20);
+        ctx.fillText(`Name: ${app.settings.name}`, leftX + pad, startY + 50);
+        ctx.fillText(`ID: ${app.settings.id}`, col2X, startY + 50);
+        ctx.fillText(`Bkash: ${app.settings.bkash}`, leftX + pad, startY + 80);
+        ctx.fillText(`Total Day: ${canvasState.data.length}`, col2X, startY + 80);
+
+        const logoImg = document.getElementById('logo-asset');
+        if (logoImg.complete && !logoImg.dataset.error) {
+            const logoX = rightX - 145; const logoY = startY + 5;
+            ctx.drawImage(logoImg, logoX, logoY, 140, 80); 
+        } else {
+            ctx.font = "bold 22px Arial"; ctx.fillStyle = "#2563eb"; ctx.textAlign = "center";
+            ctx.fillText("Bahon", rightX - 75, startY + 50); ctx.fillStyle = "black"; 
+        }
+
+        // TABLE
+        const tableY = startY + boxH + 20; const rowH = 35;
+        const cols = [ { name: "Date", w: 75 }, { name: "Time", w: 75 }, { name: "Description", w: 290 }, { name: "Day Tk", w: 65 }, { name: "OT Tk", w: 65 }, { name: "Night Tk", w: 65 }, { name: "Total", w: 85 } ];
+
+        let curX = leftX;
+        ctx.strokeRect(leftX, tableY, w, rowH); 
+        ctx.font = "bold 13px Arial"; ctx.textAlign = "center";
+        
+        cols.forEach((col, i) => {
+            ctx.fillText(col.name, curX + col.w/2, tableY + 22);
+            if(i < cols.length - 1) { ctx.beginPath(); ctx.moveTo(curX + col.w, tableY); ctx.lineTo(curX + col.w, tableY + rowH + (ITEMS_PER_PAGE * rowH)); ctx.stroke(); }
+            curX += col.w;
+        });
+
+        const chunk = canvasState.data.slice(pageIndex * ITEMS_PER_PAGE, (pageIndex + 1) * ITEMS_PER_PAGE);
+        let currentY = tableY + rowH;
+        ctx.font = "13px Arial";
+
+        for(let i=0; i<ITEMS_PER_PAGE; i++) {
+            ctx.strokeRect(leftX, currentY, w, rowH);
+            if (i < chunk.length) {
+                const e = chunk[i];
+                const d = new Date(e.date);
+                const dateStr = `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getFullYear()).slice(-2)}`;
+                let cellX = leftX;
+                
+                ctx.textAlign = "center";
+                ctx.fillText(dateStr, cellX + cols[0].w/2, currentY + 22); cellX += cols[0].w;
+                
+                ctx.font = "11px Arial";
+                ctx.fillText(formatTime(e.inTime), cellX + cols[1].w/2, currentY + 14);
+                ctx.fillText(formatTime(e.outTime), cellX + cols[1].w/2, currentY + 28); 
+                ctx.font = "13px Arial"; cellX += cols[1].w;
+
+                ctx.textAlign = "left";
+                const descText = e.desc || "";
+                const maxWidth = cols[2].w - 10;
+                const words = descText.split(' ');
+                let line1 = ""; let line2 = "";
+                for(let word of words) {
+                    if (ctx.measureText(line1 + word).width < maxWidth) line1 += word + " ";
+                    else line2 += word + " ";
+                }
+                ctx.fillText(line1, cellX + 5, currentY + 14);
+                if(line2) ctx.fillText(line2, cellX + 5, currentY + 28);
+                cellX += cols[2].w;
+
+                ctx.textAlign = "right";
+                [e.dayPay, e.otPay, e.nightPay||"-", e.totalPay].forEach((val, idx) => {
+                    ctx.fillText(val, cellX + cols[3+idx].w - 10, currentY + 22); cellX += cols[3+idx].w;
+                });
+            }
+            currentY += rowH;
+        }
+
+        if(pageIndex === canvasState.totalPages - 1) {
+            const grandTotal = canvasState.data.reduce((a,b)=>a+b.totalPay,0);
+            ctx.font = "bold 14px Arial"; ctx.strokeRect(leftX, currentY, w, rowH);
+            const descEnd = leftX + cols[0].w + cols[1].w + cols[2].w;
+            ctx.textAlign = "right";
+            ctx.fillText("Total Amounts =", descEnd - 10, currentY + 22);
+            ctx.fillText(grandTotal.toLocaleString(), rightX - 10, currentY + 22);
+            
+            currentY += rowH + 10;
+            ctx.strokeRect(leftX, currentY, w, 30);
+            ctx.textAlign = "left";
+            ctx.fillText(`In Words TK: ${numberToWords(grandTotal)} Taka Only`, leftX + 10, currentY + 20);
+            currentY += 40; 
+        } else { currentY += 20; }
+
+        const sigY = 1050; const labels = ["Submitted By", "Line Manager", "Dept. Head", "Admin/Accounts", "Approved"];
+        const interval = w / 5; ctx.font = "10px Arial"; ctx.textAlign = "center";
+        labels.forEach((lbl, i) => {
+            const x = leftX + (i * interval) + (interval/2);
+            ctx.beginPath(); ctx.moveTo(x - 40, sigY); ctx.lineTo(x + 40, sigY); ctx.stroke();
+            ctx.fillText(lbl, x, sigY + 15);
+        });
+        document.getElementById('preview-page-info').innerText = `Page ${pageIndex + 1} of ${canvasState.totalPages}`;
+    }
+
+    function nextPage() { if(canvasState.currentPage < canvasState.totalPages - 1) { canvasState.currentPage++; drawPage(canvasState.currentPage); } }
+    function prevPage() { if(canvasState.currentPage > 0) { canvasState.currentPage--; drawPage(canvasState.currentPage); } }
+    function closeCanvasPreview() { document.getElementById('canvas-modal').classList.add('hidden'); }
+    function downloadCanvasPDF() {
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const canvas = document.getElementById('billCanvas');
+        for(let i=0; i<canvasState.totalPages; i++) {
+            if(i > 0) pdf.addPage();
+            drawPage(i);
+            const imgData = canvas.toDataURL("image/jpeg", 0.85);
+            pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
+        }
+        pdf.save(`Bill_${canvasState.monthName}_${app.settings.name}.pdf`);
+        drawPage(canvasState.currentPage);
+    }
+
+    // Logic
+    function populateTechDropdowns() { const techSel = document.getElementById('form-tech'); const asstSel = document.getElementById('form-asst'); techSel.innerHTML = '<option disabled selected value="">Select Technician</option>'; asstSel.innerHTML = '<option value="">None</option>'; app.settings.technicians.forEach(t => { techSel.innerHTML += `<option value="${t}">${t}</option>`; asstSel.innerHTML += `<option value="${t}">${t}</option>`; }); }
+    function handleShiftChange() { const shift = document.querySelector('input[name="shift"]:checked').value; const rules = app.settings.shiftRules[shift]; document.getElementById('form-in').value = rules.start; document.getElementById('form-out').value = rules.end; const otPanel = document.getElementById('ot-panel'); if(shift === 'N') { otPanel.classList.add('opacity-50', 'pointer-events-none'); document.getElementById('form-ot').value = 0; } else { otPanel.classList.remove('opacity-50', 'pointer-events-none'); calculateOT(); } }
+    function calculateOT() { const shift = document.querySelector('input[name="shift"]:checked').value; if(shift === 'N') return; const outTime = document.getElementById('form-out').value; const standardEnd = app.settings.shiftRules[shift].end; if(!outTime) return; let [hOut, mOut] = outTime.split(':').map(Number); let [hStd, mStd] = standardEnd.split(':').map(Number); let minOut = hOut * 60 + mOut; let minStd = hStd * 60 + mStd; if (minStd > 720 && minOut < 600) minOut += 1440; else if (minStd >= 720 && minStd < 1140 && minOut < 360) minOut += 1440; let diff = (minOut - minStd) / 60; document.getElementById('form-ot').value = diff > 0 ? diff.toFixed(1) : 0; }
+    function saveEntry(e) { e.preventDefault(); const id = document.getElementById('entry-id').value; const date = document.getElementById('form-date').value; const shift = document.querySelector('input[name="shift"]:checked').value; const inTime = document.getElementById('form-in').value; const outTime = document.getElementById('form-out').value; const ot = parseFloat(document.getElementById('form-ot').value) || 0; const desc = document.getElementById('form-desc').value; const tech = document.getElementById('form-tech').value; const asst = document.getElementById('form-asst').value; let dayPay = parseInt(app.settings.baseSalary); let otPay = ot * parseInt(app.settings.otRate); let nightPay = shift === 'N' ? parseInt(app.settings.nightBonus) : 0; let total = dayPay + otPay + nightPay; const entry = { id: id ? parseInt(id) : Date.now(), date, shift, inTime, outTime, otHours: ot, desc, tech, asst, dayPay, otPay, nightPay, totalPay: total }; if(id) { const idx = app.entries.findIndex(x => x.id == id); app.entries[idx] = entry; } else { app.entries.push(entry); } saveData(); closeModal(); }
+    function deleteEntry(id, event) { if(event) event.stopPropagation(); if(confirm("Delete this entry?")) { app.entries = app.entries.filter(e => e.id !== id); saveData(); } }
+    function editEntry(id) { const e = app.entries.find(x => x.id === id); if(!e) return; openModal(); document.getElementById('modal-title').innerText = "Edit Entry"; document.getElementById('entry-id').value = e.id; document.getElementById('form-date').value = e.date; document.getElementById('form-in').value = e.inTime; document.getElementById('form-out').value = e.outTime; document.getElementById('form-ot').value = e.otHours; document.getElementById('form-desc').value = e.desc; document.getElementById('form-tech').value = e.tech; document.getElementById('form-asst').value = e.asst || ""; document.querySelector(`input[name="shift"][value="${e.shift}"]`).checked = true; }
+    function openModal() { document.getElementById('entry-modal').classList.remove('hidden'); document.getElementById('modal-title').innerText = "New Entry"; document.getElementById('duty-form').reset(); document.getElementById('entry-id').value = ""; document.getElementById('form-date').valueAsDate = new Date(); populateTechDropdowns(); handleShiftChange(); }
+    function closeModal() { document.getElementById('entry-modal').classList.add('hidden'); }
+    function switchTab(tab) { document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active')); document.getElementById(`view-${tab}`).classList.add('active'); document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active', 'text-slate-900', 'text-slate-400')); document.getElementById(`nav-${tab}`).classList.add('active', 'text-slate-900'); if(tab === 'history') renderHistory(); }
+    function populateSettingsInputs() { document.getElementById('setting-name').value = app.settings.name; document.getElementById('setting-id').value = app.settings.id; document.getElementById('setting-bkash').value = app.settings.bkash; document.getElementById('setting-base').value = app.settings.baseSalary; document.getElementById('setting-ot').value = app.settings.otRate; document.getElementById('setting-night').value = app.settings.nightBonus; }
+    function updateSettings() { app.settings.name = document.getElementById('setting-name').value; app.settings.id = document.getElementById('setting-id').value; app.settings.bkash = document.getElementById('setting-bkash').value; app.settings.baseSalary = document.getElementById('setting-base').value; app.settings.otRate = document.getElementById('setting-ot').value; app.settings.nightBonus = document.getElementById('setting-night').value; saveData(); }
+    function clearAllData() { if(confirm("WARNING: This will delete everything!")) { localStorage.removeItem('duty_manager_v10'); location.reload(); } }
+    function renderDashboard() { const list = document.getElementById('dashboard-list'); list.innerHTML = ""; const sorted = [...app.entries].sort((a,b) => new Date(b.date) - new Date(a.date)); const now = new Date(); const curY = now.getFullYear(); const curM = now.getMonth(); const curData = sorted.filter(e => { const d = new Date(e.date); return d.getFullYear() === curY && d.getMonth() === curM; }); const total = curData.reduce((sum, e) => sum + e.totalPay, 0); const ot = curData.reduce((sum, e) => sum + e.otHours, 0); document.getElementById('dash-total').innerText = total.toLocaleString(); document.getElementById('dash-count').innerText = curData.length; document.getElementById('dash-ot').innerText = ot.toFixed(1); document.getElementById('current-month-lbl').innerText = now.toLocaleString('default', { month: 'long' }); sorted.slice(0, 10).forEach(e => list.innerHTML += createCard(e)); }
+    function renderHistory() { const list = document.getElementById('history-list'); const filter = document.getElementById('filter-month').value; list.innerHTML = ""; const filtered = app.entries.filter(e => e.date.startsWith(filter)).sort((a,b) => new Date(b.date) - new Date(a.date)); if(filtered.length === 0) list.innerHTML = `<div class="text-center text-slate-400 mt-10">No records found</div>`; filtered.forEach(e => list.innerHTML += createCard(e)); }
+    function populateMonthFilter() { const select = document.getElementById('filter-month'); const oldVal = select.value; select.innerHTML = ""; const months = new Set(app.entries.map(e => e.date.slice(0, 7))); const now = new Date().toISOString().slice(0, 7); months.add(now); Array.from(months).sort().reverse().forEach(m => { const [y, mn] = m.split('-'); const label = new Date(y, mn-1).toLocaleString('default', { month: 'long', year: 'numeric' }); select.innerHTML += `<option value="${m}">${label}</option>`; }); if(oldVal && months.has(oldVal)) select.value = oldVal; else select.value = now; }
+    function createCard(e) { const dateObj = new Date(e.date); const day = dateObj.getDate(); const month = dateObj.toLocaleString('default', { month: 'short' }); let badge = `bg-slate-100 text-slate-600`; if(e.shift === 'M') badge = `bg-yellow-100 text-yellow-700`; if(e.shift === 'R') badge = `bg-blue-100 text-blue-700`; if(e.shift === 'E') badge = `bg-purple-100 text-purple-700`; if(e.shift === 'N') badge = `bg-slate-800 text-white`; return `<div class="bg-white p-3 rounded-xl border border-slate-100 flex items-center justify-between shadow-sm" onclick="editEntry(${e.id})"><div class="flex items-center gap-3"><div class="h-12 w-12 bg-slate-50 rounded-lg flex flex-col items-center justify-center border border-slate-200"><span class="text-[10px] uppercase font-bold text-slate-400">${month}</span><span class="text-lg font-black text-slate-800 leading-none">${day}</span></div><div><div class="flex items-center gap-2"><span class="text-[10px] font-bold px-1.5 rounded ${badge}">${e.shift}</span><span class="text-xs text-slate-400 font-bold">${e.tech}</span></div><div class="text-sm font-bold text-slate-700 mt-0.5">৳ ${e.totalPay}</div></div></div><button onclick="deleteEntry(${e.id}, event)" class="h-8 w-8 rounded-full bg-slate-50 text-slate-300 hover:text-red-500 hover:bg-red-50 flex items-center justify-center"><i class="fas fa-trash"></i></button></div>`; }
+    function numberToWords(n) { if (n === 0) return "Zero"; const a = ['','One ','Two ','Three ','Four ','Five ','Six ','Seven ','Eight ','Nine ','Ten ','Eleven ','Twelve ','Thirteen ','Fourteen ','Fifteen ','Sixteen ','Seventeen ','Eighteen ','Nineteen ']; const b = ['', '', 'Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety']; const num = ('000000000' + n).slice(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/); if (!num) return ''; let str = ''; str += (num[1] != 0) ? (a[Number(num[1])] || b[num[1][0]] + ' ' + a[num[1][1]]) + 'Crore ' : ''; str += (num[2] != 0) ? (a[Number(num[2])] || b[num[2][0]] + ' ' + a[num[2][1]]) + 'Lakh ' : ''; str += (num[3] != 0) ? (a[Number(num[3])] || b[num[3][0]] + ' ' + a[num[3][1]]) + 'Thousand ' : ''; str += (num[4] != 0) ? (a[Number(num[4])] || b[num[4][0]] + ' ' + a[num[4][1]]) + 'Hundred ' : ''; str += (num[5] != 0) ? ((str != '') ? 'and ' : '') + (a[Number(num[5])] || b[num[5][0]] + ' ' + a[num[5][1]]) : ''; return str.trim(); }
+    function formatTime(t) { if(!t) return ""; let [h, m] = t.split(':'); h = parseInt(h); let ampm = h >= 12 ? 'PM' : 'AM'; h = h % 12; h = h ? h : 12; return `${h}:${m} ${ampm}`; }
+    function renderTechSettings() { const list = document.getElementById('tech-list-display'); list.innerHTML = ''; app.settings.technicians.forEach((t, i) => { list.innerHTML += `<div class="flex justify-between items-center bg-slate-100 px-3 py-2 rounded text-sm"><span class="font-bold text-slate-700">${t}</span><button onclick="removeTech(${i})" class="text-red-500"><i class="fas fa-times"></i></button></div>`; }); }
+    function addTech() { const input = document.getElementById('new-tech-input'); const val = input.value.trim(); if(val && !app.settings.technicians.includes(val)) { app.settings.technicians.push(val); input.value = ''; saveData(); renderTechSettings(); } }
+    function removeTech(i) { if(confirm("Remove " + app.settings.technicians[i] + "?")) { app.settings.technicians.splice(i, 1); saveData(); renderTechSettings(); } }
+    function downloadBackup() { const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(app)); const downloadAnchorNode = document.createElement('a'); downloadAnchorNode.setAttribute("href", dataStr); downloadAnchorNode.setAttribute("download", "duty_manager_backup_" + new Date().toISOString().slice(0,10) + ".json"); document.body.appendChild(downloadAnchorNode); downloadAnchorNode.click(); downloadAnchorNode.remove(); }
+    function restoreBackup(input) { const file = input.files[0]; if(!file) return; const reader = new FileReader(); reader.onload = function(e) { try { const data = JSON.parse(e.target.result); if(data.entries && data.settings) { app = data; saveData(); alert("Data restored successfully!"); location.reload(); } else { alert("Invalid backup file."); } } catch(err) { alert("Error reading file."); } }; reader.readAsText(file); }
+</script>
+</body>
+</html>
+
+
